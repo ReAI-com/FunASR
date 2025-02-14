@@ -29,6 +29,7 @@ from funasr.train_utils.set_all_random_seed import set_all_random_seed
 from funasr.train_utils.load_pretrained_model import load_pretrained_model
 from funasr.utils import export_utils
 from funasr.utils import misc
+from funasr.utils.speaker_manager import SpeakerManager
 
 try:
     from funasr.models.campplus.utils import sv_chunk, postprocess, distribute_spk
@@ -157,6 +158,9 @@ class AutoModel:
             spk_kwargs["device"] = kwargs["device"]
             spk_model, spk_kwargs = self.build_model(**spk_kwargs)
             self.cb_model = ClusterBackend(**cb_kwargs).to(kwargs["device"])
+            self.speaker_manager = SpeakerManager(
+                similarity_threshold=kwargs.get("speaker_similarity_threshold", 0.75)
+            )
             spk_mode = kwargs.get("spk_mode", "punc_segment")
             if spk_mode not in ["default", "vad_segment", "punc_segment"]:
                 logging.error("spk_mode should be one of default, vad_segment and punc_segment.")
@@ -480,7 +484,12 @@ class AutoModel:
                         spk_res = self.inference(
                             speech_b, input_len=None, model=self.spk_model, kwargs=kwargs, **cfg
                         )
-                        results[_b]["spk_embedding"] = spk_res[0]["spk_embedding"]
+                        embedding = spk_res[0]["spk_embedding"]
+                        results[_b]["spk_embedding"] = embedding
+                        # Get speaker ID from embedding
+                        speaker_id = self.speaker_manager.get_speaker_id(embedding)
+                        results[_b]["speaker"] = speaker_id
+                        logging.debug(f"Identified speaker {speaker_id} for segment {_b}")
                 beg_idx = end_idx
                 end_idx += 1
                 max_len_in_batch = sample_length
@@ -597,6 +606,11 @@ class AutoModel:
                             return_raw_text=return_raw_text,
                         )
                 distribute_spk(sentence_list, sv_output)
+                # Add speaker IDs to sentence info
+                for sent in sentence_list:
+                    if "spk" in sent:
+                        spk_idx = sent["spk"]
+                        sent["speaker"] = self.speaker_manager.speaker_ids[spk_idx]
                 result["sentence_info"] = sentence_list
             elif kwargs.get("sentence_timestamp", False):
                 if not len(result["text"].strip()):
@@ -639,6 +653,18 @@ class AutoModel:
         #                      f"time_escape_all: {time_escape_total_all_samples:0.3f}")
         return results_ret_list
 
+    def update_speaker_name(self, speaker_id: str, name: str):
+        """Update speaker ID with real name.
+        
+        Args:
+            speaker_id (str): Current speaker ID (e.g., "user1")
+            name (str): New name to assign
+        """
+        if hasattr(self, "speaker_manager"):
+            self.speaker_manager.update_speaker_name(speaker_id, name)
+        else:
+            logging.warning("Speaker manager not initialized. Initialize with spk_model first.")
+            
     def export(self, input=None, **cfg):
         """
 
