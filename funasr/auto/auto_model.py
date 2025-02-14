@@ -157,10 +157,19 @@ class AutoModel:
             spk_kwargs["model_revision"] = kwargs.get("spk_model_revision", "master")
             spk_kwargs["device"] = kwargs["device"]
             spk_model, spk_kwargs = self.build_model(**spk_kwargs)
-            self.cb_model = ClusterBackend(**cb_kwargs).to(kwargs["device"])
-            self.speaker_manager = SpeakerManager(
-                similarity_threshold=kwargs.get("speaker_similarity_threshold", 0.75)
-            )
+            
+            # Initialize appropriate manager based on model type
+            if "SherpaEmbedding" in str(type(spk_model)):
+                self.speaker_manager = SpeakerManager(
+                    similarity_threshold=kwargs.get("speaker_similarity_threshold", 0.75)
+                )
+                logging.info("Using SherpaEmbedding for speaker embeddings")
+            elif "CAMPPlus" in str(type(spk_model)):
+                self.cb_model = ClusterBackend(**cb_kwargs).to(kwargs["device"])
+                logging.info("Using CAMPPlus for speaker embeddings")
+            else:
+                logging.warning(f"Unknown speaker model type: {type(spk_model)}")
+                
             spk_mode = kwargs.get("spk_mode", "punc_segment")
             if spk_mode not in ["default", "vad_segment", "punc_segment"]:
                 logging.error("spk_mode should be one of default, vad_segment and punc_segment.")
