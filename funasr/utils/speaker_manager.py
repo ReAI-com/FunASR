@@ -14,18 +14,21 @@ class SpeakerManager:
     providing functionality to identify speakers and update their names.
     """
     
-    def __init__(self, similarity_threshold=0.75):
+    def __init__(self, similarity_threshold=0.75, cache_size=1000):
         """Initialize the speaker manager.
         
         Args:
             similarity_threshold (float): Threshold for cosine similarity to consider
                                         two embeddings as the same speaker.
+            cache_size (int): Maximum number of embeddings to cache.
         """
         self.speaker_embeddings = []
         self.speaker_ids = []
         self.next_id = 1
         self.similarity_threshold = similarity_threshold
-        logging.info(f"Initialized SpeakerManager with similarity threshold {similarity_threshold}")
+        self.embedding_cache = {}  # Cache for recent embeddings
+        self.cache_size = cache_size
+        logging.info(f"Initialized SpeakerManager with similarity threshold {similarity_threshold} and cache size {cache_size}")
         
     def get_speaker_id(self, embedding):
         """Get speaker ID for given embedding.
@@ -36,28 +39,61 @@ class SpeakerManager:
         Returns:
             str: Speaker ID (either existing or new)
         """
+        # Convert embedding to CPU for caching
+        embedding_key = embedding.cpu().detach()
+        
+        # Check cache first
+        if embedding_key in self.embedding_cache:
+            speaker_id = self.embedding_cache[embedding_key]
+            logging.debug(f"Cache hit for speaker {speaker_id}")
+            return speaker_id
+            
         if not self.speaker_embeddings:
             self.speaker_embeddings.append(embedding)
-            self.speaker_ids.append(f"user{self.next_id}")
-            logging.info(f"Created first speaker profile: user{self.next_id}")
+            speaker_id = f"user{self.next_id}"
+            self.speaker_ids.append(speaker_id)
+            logging.info(f"Created first speaker profile: {speaker_id}")
             self.next_id += 1
-            return self.speaker_ids[-1]
             
-        similarities = [
-            torch.nn.functional.cosine_similarity(embedding, e, dim=0)
-            for e in self.speaker_embeddings
-        ]
-        max_sim, max_idx = max(similarities), np.argmax(similarities)
+            # Update cache
+            self._update_cache(embedding_key, speaker_id)
+            return speaker_id
+            
+        # Compute similarities using batch operations for better performance
+        embeddings_tensor = torch.stack(self.speaker_embeddings)
+        similarities = torch.nn.functional.cosine_similarity(embedding.unsqueeze(0), embeddings_tensor, dim=1)
+        max_sim, max_idx = torch.max(similarities, dim=0)
         
         if max_sim > self.similarity_threshold:
-            logging.debug(f"Matched existing speaker {self.speaker_ids[max_idx]} with similarity {max_sim:.3f}")
-            return self.speaker_ids[max_idx]
+            speaker_id = self.speaker_ids[max_idx]
+            logging.debug(f"Matched existing speaker {speaker_id} with similarity {max_sim:.3f}")
+            
+            # Update cache
+            self._update_cache(embedding_key, speaker_id)
+            return speaker_id
         
+        speaker_id = f"user{self.next_id}"
         self.speaker_embeddings.append(embedding)
-        self.speaker_ids.append(f"user{self.next_id}")
-        logging.info(f"Created new speaker profile: user{self.next_id}")
+        self.speaker_ids.append(speaker_id)
+        logging.info(f"Created new speaker profile: {speaker_id}")
         self.next_id += 1
-        return self.speaker_ids[-1]
+        
+        # Update cache
+        self._update_cache(embedding_key, speaker_id)
+        return speaker_id
+        
+    def _update_cache(self, embedding_key, speaker_id):
+        """Update the embedding cache, removing oldest entries if necessary.
+        
+        Args:
+            embedding_key (torch.Tensor): Embedding tensor to cache
+            speaker_id (str): Speaker ID to associate with embedding
+        """
+        if len(self.embedding_cache) >= self.cache_size:
+            # Remove oldest entry (first item in dict)
+            self.embedding_cache.pop(next(iter(self.embedding_cache)))
+        
+        self.embedding_cache[embedding_key] = speaker_id
         
     def update_speaker_name(self, speaker_id, name):
         """Update speaker ID with real name.
