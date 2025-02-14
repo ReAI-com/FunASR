@@ -122,6 +122,11 @@ class AutoModel:
 
         log_level = getattr(logging, kwargs.get("log_level", "INFO").upper())
         logging.basicConfig(level=log_level)
+        
+        # Initialize speaker manager early
+        self.speaker_manager = SpeakerManager(
+            similarity_threshold=kwargs.get("speaker_similarity_threshold", 0.75)
+        )
 
         model, kwargs = self.build_model(**kwargs)
 
