@@ -75,12 +75,18 @@ class TestSpeakerLabeling(unittest.TestCase):
         
     def test_model_integration(self):
         """测试模型集成"""
+        # Mock the model registration
+        from funasr.register import tables
+        from funasr.models.sherpa_embedding.model import SherpaEmbeddingModel
+        tables.model_classes["SherpaEmbedding"] = SherpaEmbeddingModel
+        
         # Test integration with AutoModel
         kwargs = {
             "model": "SherpaEmbedding",
             "model_path": "path/to/model",
             "device": self.device,
-            "speaker_similarity_threshold": 0.8
+            "speaker_similarity_threshold": 0.8,
+            "model_conf": {}  # Skip model download
         }
         model = AutoModel(**kwargs)
         
