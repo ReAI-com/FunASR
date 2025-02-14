@@ -104,8 +104,13 @@ class TestSpeakerLabeling(unittest.TestCase):
         self.assertEqual(model.speaker_manager.similarity_threshold, 0.8)
         
         # Test speaker name updates
+        embedding = torch.randn(192, device=self.device)
+        speaker_id = model.speaker_manager.get_speaker_id(embedding)
+        self.assertEqual(speaker_id, "user1")
+        
         model.update_speaker_name("user1", "张三")
-        self.assertIn("张三", model.speaker_manager.speaker_ids)
+        speaker_id_updated = model.speaker_manager.get_speaker_id(embedding)
+        self.assertEqual(speaker_id_updated, "张三")
 
 if __name__ == "__main__":
     unittest.main()
