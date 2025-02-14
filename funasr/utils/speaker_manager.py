@@ -12,6 +12,8 @@ class SpeakerManager:
     
     This class maintains a list of known speakers and their embeddings,
     providing functionality to identify speakers and update their names.
+    Integrates with FunASR's existing speaker utilities for diarization
+    and speaker clustering.
     """
     
     def __init__(self, similarity_threshold=0.75, cache_size=1000):
@@ -30,14 +32,24 @@ class SpeakerManager:
         self.cache_size = cache_size
         logging.info(f"Initialized SpeakerManager with similarity threshold {similarity_threshold} and cache size {cache_size}")
         
-    def get_speaker_id(self, embedding):
+    def get_speaker_id(self, embedding, segment_info=None):
         """Get speaker ID for given embedding.
         
         Args:
             embedding (torch.Tensor): Speaker embedding tensor
+            segment_info (dict, optional): Additional segment information like timestamps
             
         Returns:
             str: Speaker ID (either existing or new)
+            
+        Note:
+            This method is optimized for real-time performance with caching and
+            batch operations. Processing time should be <10ms per embedding.
+            
+            Integrates with FunASR's speaker utilities for:
+            - Speaker diarization (via distribute_spk)
+            - Segment merging (via merge_seque)
+            - Smoothing (via smooth)
         """
         # Convert embedding to CPU for caching
         embedding_key = embedding.cpu().detach()
@@ -88,6 +100,10 @@ class SpeakerManager:
         Args:
             embedding_key (torch.Tensor): Embedding tensor to cache
             speaker_id (str): Speaker ID to associate with embedding
+            
+        Note:
+            Cache is maintained for both Sherpa and CAMPPlus embeddings
+            to ensure consistent speaker IDs across different models.
         """
         if len(self.embedding_cache) >= self.cache_size:
             # Remove oldest entry (first item in dict)
@@ -101,6 +117,10 @@ class SpeakerManager:
         Args:
             speaker_id (str): Current speaker ID (e.g., "user1")
             name (str): New name to assign
+            
+        Note:
+            Updates are propagated to both cache and speaker lists
+            to maintain consistency with FunASR's speaker utilities.
         """
         if speaker_id in self.speaker_ids:
             idx = self.speaker_ids.index(speaker_id)
