@@ -166,9 +166,15 @@ class AutoModel:
                 logging.info("Using SherpaEmbedding for speaker embeddings")
             elif "CAMPPlus" in str(type(spk_model)):
                 self.cb_model = ClusterBackend(**cb_kwargs).to(kwargs["device"])
+                self.speaker_manager = SpeakerManager(
+                    similarity_threshold=kwargs.get("speaker_similarity_threshold", 0.75)
+                )
                 logging.info("Using CAMPPlus for speaker embeddings")
             else:
                 logging.warning(f"Unknown speaker model type: {type(spk_model)}")
+                self.speaker_manager = SpeakerManager(
+                    similarity_threshold=kwargs.get("speaker_similarity_threshold", 0.75)
+                )
                 
             spk_mode = kwargs.get("spk_mode", "punc_segment")
             if spk_mode not in ["default", "vad_segment", "punc_segment"]:
