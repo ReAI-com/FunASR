@@ -8,9 +8,17 @@ import time
 import torch
 import unittest
 import numpy as np
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from funasr.auto.auto_model import AutoModel
 from funasr.utils.speaker_manager import SpeakerManager
+
+# Mock sherpa module
+mock_sherpa = MagicMock()
+mock_sherpa.SpeakerEmbeddingExtractorConfig = MagicMock()
+mock_sherpa.SpeakerEmbeddingExtractor = MagicMock()
+mock_sherpa.SpeakerEmbeddingExtractor().compute.return_value = np.random.randn(192)
+mock_sherpa.SpeakerEmbeddingExtractor().create_stream = MagicMock()
+
 
 class TestSpeakerLabeling(unittest.TestCase):
     """测试说话人标注功能"""
@@ -73,6 +81,7 @@ class TestSpeakerLabeling(unittest.TestCase):
         time_per_embedding = time_total / len(embeddings)
         self.assertLess(time_per_embedding, 0.01)  # Less than 10ms per embedding
         
+    @patch.dict('sys.modules', {'sherpa': mock_sherpa})
     def test_model_integration(self):
         """测试模型集成"""
         # Mock the model registration
